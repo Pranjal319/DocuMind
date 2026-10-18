@@ -1,0 +1,45 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Bytecode & Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ChromaDB vector store data & binary indices
+chroma_db/
+*.chroma/
+*.sqlite3
+*.bin
+
+# Uploaded documents and temporary files
+uploads/
+temp_uploads/
+*.pdf
+
+# Environment variables & secrets
+.env
+.env.*
+*.env
+.streamlit/secrets.toml
+
+# Streamlit runtime and logs
+.streamlit/
+*.log
+
+# Pytest & test coverage
+.pytest_cache/
+.coverage
+htmlcov/
+junit/
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
+desktop.ini
