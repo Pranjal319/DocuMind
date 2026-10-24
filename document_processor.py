@@ -154,3 +154,114 @@ def extract_pages_from_pdf(
         try:
             extracted_text = (page.extract_text() or "").strip()
         except Exception:
+            extracted_text = ""
+
+        total_characters += len(extracted_text)
+
+        # Only create a document if the page contains text
+        if extracted_text:
+            page_documents.append(
+                Document(
+                    page_content=extracted_text,
+                    metadata={
+                        "source": filename,
+                        "file_hash": file_hash,
+                        "page": page_number,
+                        "total_pages": total_pages,
+                        "char_count": len(extracted_text),
+                    },
+                )
+            )
+
+    # Scanned PDF and Blank PDF Validation
+    if total_characters == 0:
+        raise EmptyPDFError(
+            f"'{filename}' has {total_pages} page(s) but no extractable text could be found. "
+            "It may be completely blank or contain only unreadable scanned images."
+        )
+
+    if total_characters < MIN_EXTRACTABLE_TEXT_LENGTH:
+        raise ScannedPDFError(
+            f"'{filename}' contains very little extractable text ({total_characters} characters). "
+            "It appears to be a scanned document or image-only PDF. "
+            "Chat with Your Documents requires selectable text."
+        )
+
+    return page_documents, file_hash
+
+
+# -----------------------------------------------------------------------------
+# Core Step 2: Split Documents into Overlapping Chunks
+# -----------------------------------------------------------------------------
+def split_documents_into_chunks(
+    page_documents: List[Document],
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> List[Document]:
+    """
+    Split long page documents into smaller, overlapping chunks.
+    
+    Why chunking is necessary:
+    1. LLMs have context windows and can get confused by full books.
+    2. Smaller chunks make retrieval much more accurate.
+    3. Overlap ensures that a sentence split between chunks isn't cut in half!
+    """
+    if not page_documents:
+        return []
+
+    # Ensure overlap is always strictly smaller than chunk size
+    if chunk_overlap >= chunk_size:
+        chunk_overlap = chunk_size // 4
+
+    # LangChain text splitter that breaks on paragraphs, sentences, and words
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+
+    chunks = text_splitter.split_documents(page_documents)
+
+    # Attach helpful chunk identifiers for beginner inspection
+    for index, chunk in enumerate(chunks):
+        source = chunk.metadata.get("source", "doc")
+        page = chunk.metadata.get("page", 1)
+        chunk.metadata["chunk_index"] = index
+        chunk.metadata["chunk_id"] = f"{source}_p{page}_c{index}"
+
+    return chunks
+
+
+# -----------------------------------------------------------------------------
+# Core Step 3: End-to-End Orchestrator
+# -----------------------------------------------------------------------------
+def process_uploaded_pdf(
+    file_source: Union[str, Path, BinaryIO, bytes],
+    filename: str = "document.pdf",
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> DocumentMetadataSummary:
+    """
+    Orchestrate the full ingestion pipeline:
+    1. Extract text and page numbers from PDF.
+    2. Split pages into overlapping chunks.
+    3. Return a clean summary ready for vector storage.
+    """
+    page_docs, file_hash = extract_pages_from_pdf(file_source, filename=filename)
+    chunks = split_documents_into_chunks(
+        page_docs,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+
+    total_pages = page_docs[0].metadata.get("total_pages", len(page_docs)) if page_docs else 0
+    total_characters = sum(len(c.page_content) for c in chunks)
+
+    return DocumentMetadataSummary(
+        filename=filename,
+        file_hash=file_hash,
+        total_pages=total_pages,
+        total_chunks=len(chunks),
+        total_characters=total_characters,
+        chunks=chunks,
+    )
