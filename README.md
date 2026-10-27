@@ -1,6 +1,6 @@
 # ✦ DocuMind
 
-> *"Your documents. Your knowledge. One conversation."*
+> *"My first RAG based application project"*
 
 **DocuMind** is a modern, developer-grade **Retrieval-Augmented Generation (RAG)** application. Upload text-based PDF documents and ask questions about their contents. The system retrieves relevant passages from your uploaded PDF and uses a local LLM to generate factual, grounded answers with direct source citations and page numbers.
 
